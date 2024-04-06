@@ -3,10 +3,13 @@ package worker
 import (
 	"context"
 	"fmt"
+	"io"
 	"runtime"
 	"sync"
 	"sync/atomic"
 )
+
+var logOutput io.Writer = io.Discard
 
 type ThreadPoolWorker struct {
 	orgCtx    context.Context
@@ -23,9 +26,10 @@ type ThreadPoolWorker struct {
 
 func NewThreadPoolWorker(ctx context.Context, opts ...Option) *ThreadPoolWorker {
 	var workerCfg = workerConfig{
-		autoStart: true,
-		queueSize: runtime.GOMAXPROCS(0),
-		poolSize:  runtime.GOMAXPROCS(0),
+		autoStart:   true,
+		autoRespawn: true,
+		queueSize:   runtime.GOMAXPROCS(0),
+		poolSize:    runtime.GOMAXPROCS(0),
 	}
 
 	for _, opt := range opts {
@@ -58,10 +62,10 @@ func (self *ThreadPoolWorker) Submit(ctx context.Context, task Task) (TaskHandle
 	task.handle = th
 	var ch chan Task
 	if task.isHighPriority {
-		fmt.Printf("Sending task in run queue: id = %d\n", task.handle.id)
+		fmt.Fprintf(logOutput, "Sending task in run queue: id = %d\n", task.handle.id)
 		ch = self.runQueue
 	} else {
-		fmt.Printf("Sending task in task queue: id = %d\n", task.handle.id)
+		fmt.Fprintf(logOutput, "Sending task in task queue: id = %d\n", task.handle.id)
 		ch = self.taskQueue
 	}
 
@@ -103,25 +107,26 @@ func (self *ThreadPoolWorker) wait() {
 }
 
 func (self *ThreadPoolWorker) runWorker(ctx context.Context, id int, wg *sync.WaitGroup) {
-	fmt.Printf("Started worker: %d\n", id)
+	fmt.Fprintf(logOutput, "Started worker: %d\n", id)
 	if wg != nil {
 		defer func() {
 			wg.Done()
-			fmt.Printf("Decremented the wg counter\n")
-			fmt.Printf("Stopped worker thread: id = %d\n", id)
+			fmt.Fprintf(logOutput, "Decremented the wg counter\n")
+			fmt.Fprintf(logOutput, "Stopped worker thread: id = %d\n", id)
 		}()
 	}
 
 	var task Task
 
 	defer func() {
-		err := recover()
-		if err != nil {
-			fmt.Printf("Thread paniced: %+v\n", err)
+		if err := recover(); err != nil {
+			fmt.Fprintf(logOutput, "Thread paniced: %+v\n", err)
 			task.handle.panic <- err
-			fmt.Printf("Worker thread paniced. Respawning: id = %d\n", id)
-			wg.Add(1)
-			go self.runWorker(ctx, id, wg)
+			if self.cfg.autoRespawn {
+				fmt.Fprintf(logOutput, "Worker thread paniced. Respawning: id = %d\n", id)
+				wg.Add(1)
+				go self.runWorker(ctx, id, wg)
+			}
 		}
 	}()
 
@@ -131,21 +136,22 @@ func (self *ThreadPoolWorker) runWorker(ctx context.Context, id int, wg *sync.Wa
 			return
 		case task = <-self.runQueue:
 			if task.handle.IsCancelled() {
-				fmt.Printf("Task is already cancelled. Ignoring: id = %d\n", task.handle.id)
+				fmt.Fprintf(logOutput, "Task is already cancelled. Ignoring: id = %d\n", task.handle.id)
 				continue
 			}
-			fmt.Printf("Handling task: id = %d\n", task.handle.id)
+			fmt.Fprintf(logOutput, "Handling task: id = %d\n", task.handle.id)
 			task.Run()
+			close(task.handle.done)
 		}
 	}
 }
 
 func (self *ThreadPoolWorker) runProducer(ctx context.Context, wg *sync.WaitGroup) {
-	fmt.Printf("Started producer thread\n")
+	fmt.Fprintf(logOutput, "Started producer thread\n")
 	if wg != nil {
 		defer func() {
 			wg.Done()
-			fmt.Printf("Stopped producer thread\n")
+			fmt.Fprintf(logOutput, "Stopped producer thread\n")
 		}()
 	}
 
@@ -171,7 +177,7 @@ func (self *ThreadPoolWorker) startProducer() {
 
 func (self *ThreadPoolWorker) stopProducer() {
 	if self.stop != nil {
-		fmt.Printf("Stopping producer thread\n")
+		fmt.Fprintf(logOutput, "Stopping producer thread\n")
 		self.stop()
 		self.stop = nil
 	}
@@ -179,7 +185,7 @@ func (self *ThreadPoolWorker) stopProducer() {
 
 func (self *ThreadPoolWorker) stopWorkers() {
 	if self.shutdown != nil {
-		fmt.Printf("Stopping worker threads\n")
+		fmt.Fprintf(logOutput, "Stopping worker threads\n")
 		self.shutdown()
 		self.shutdown = nil
 	}
