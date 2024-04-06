@@ -1,51 +1,141 @@
-package worker_test
+package worker
 
 import (
 	"context"
+	"errors"
+	"fmt"
+	"io"
+	"os"
 	"runtime"
 	"testing"
 	"time"
 
-	"github.com/nnishant776/worker"
 	"github.com/stretchr/testify/assert"
 )
 
 func Test_ThreadPoolWorker(t *testing.T) {
-	t.Logf("Default queue size: %v", runtime.GOMAXPROCS(0))
+	t.Run("Creation", func(t *testing.T) {
+		t.Run("Without options", func(t *testing.T) {
+			var maxQueueSize = runtime.GOMAXPROCS(0)
+			var ctx = context.Background()
+			var thpWorker = NewThreadPoolWorker(ctx)
+			assert.Equal(t, maxQueueSize, thpWorker.cfg.queueSize)
+			assert.Equal(t, maxQueueSize, thpWorker.cfg.poolSize)
+			assert.Equal(t, true, thpWorker.cfg.autoStart)
+			assert.Equal(t, true, thpWorker.cfg.autoRespawn)
+			assert.NotEqual(t, nil, thpWorker.ctx)
+		})
 
-	var ctx = context.Background()
-	var thpWorker = worker.NewThreadPoolWorker(ctx, worker.WithNoAutoStart())
-	var handleMap = map[int]worker.TaskHandle{}
+		t.Run("With options", func(t *testing.T) {
+			t.Run("WithNoAutoStart", func(t *testing.T) {
+				var ctx = context.Background()
+				var thpWorker = NewThreadPoolWorker(ctx, WithNoAutoStart())
+				assert.Equal(t, false, thpWorker.cfg.autoStart)
+			})
 
-	for i := 0; i < 20; i++ {
-		var task = worker.Task{
-			Run: func() {
-				panic("test panic")
-			},
-		}
-		// task.SetHighPriority()
-		chCtx, _ := context.WithTimeout(ctx, 5*time.Second)
-		handle, err := thpWorker.Submit(chCtx, task)
-		if err != nil {
-			t.Logf("Failed to submit task: err = %s", err)
-			continue
-		}
-		if i%2 == 0 {
-			handle.Cancel()
-		}
-		handleMap[i] = handle
-	}
+			t.Run("WithNoWorkerAutoRespawn", func(t *testing.T) {
+				var ctx = context.Background()
+				var thpWorker = NewThreadPoolWorker(ctx, WithNoWorkerAutoRespawn())
+				assert.Equal(t, false, thpWorker.cfg.autoRespawn)
+			})
 
-	time.Sleep(5 * time.Second)
-	t.Logf("Finished sleep")
-	thpWorker.Shutdown()
-	thpWorker.Wait()
+			t.Run("WithQueueSize", func(t *testing.T) {
+				var ctx = context.Background()
+				var thpWorker = NewThreadPoolWorker(ctx, WithQueueSize(4))
+				assert.Equal(t, 4, thpWorker.cfg.queueSize)
+				assert.Equal(t, 2, thpWorker.cfg.poolSize)
+			})
 
-	for k, handle := range handleMap {
-		if k%2 == 0 {
-			assert.Equal(t, true, handle.IsCancelled())
-		} else {
-			assert.NotEqual(t, nil, handle.Panic())
+			t.Run("WithPoolSize", func(t *testing.T) {
+				var ctx = context.Background()
+				var thpWorker = NewThreadPoolWorker(ctx, WithPoolSize(4))
+				assert.Equal(t, 2, thpWorker.cfg.queueSize)
+				assert.Equal(t, 4, thpWorker.cfg.poolSize)
+			})
+		})
+	})
+
+	t.Run("Task completion", func(t *testing.T) {
+		var ctx = context.Background()
+		var thpWorker = NewThreadPoolWorker(ctx)
+		var handleMap = map[uint64]TaskHandle{}
+
+		for i := 0; i < 20; i++ {
+			var task = Task{
+				Run: func() {
+					t.Logf("Finished task: id = %d", i+1)
+				},
+			}
+			handle, err := thpWorker.Submit(ctx, task)
+			if err != nil {
+				t.Logf("Failed to submit task: err = %s", err)
+				continue
+			}
+			handleMap[handle.id] = handle
 		}
-	}
+
+		for _, handle := range handleMap {
+			var ch = handle.Done()
+			<-ch
+			assert.Equal(t, true, handle.IsDone())
+		}
+
+		thpWorker.Shutdown()
+		thpWorker.Wait()
+	})
+
+	t.Run("Submit timeout", func(t *testing.T) {
+		var ctx = context.Background()
+		var thpWorker = NewThreadPoolWorker(ctx, WithNoAutoStart())
+
+		for i := 0; i < 20; i++ {
+			var task = Task{
+				Run: func() {
+					t.Logf("Finished task: id = %d", i+1)
+				},
+			}
+			chCtx, _ := context.WithTimeout(ctx, 10*time.Millisecond)
+			_, err := thpWorker.Submit(chCtx, task)
+			if err != nil {
+				// t.Logf("Failed to submit task: err = %s", err)
+				assert.Equal(t, true, errors.Is(err, context.DeadlineExceeded))
+				continue
+			}
+		}
+
+		thpWorker.Shutdown()
+		thpWorker.Wait()
+	})
+
+	t.Run("Worker panic", func(t *testing.T) {
+		var ctx = context.Background()
+		var thpWorker = NewThreadPoolWorker(ctx)
+		var handleMap = map[uint64]TaskHandle{}
+		logOutput = os.Stderr
+
+		for i := 0; i < 20; i++ {
+			var task = Task{
+				Run: func() {
+					panic(fmt.Sprintf("Task paniced: id = %d", i+1))
+				},
+			}
+			handle, err := thpWorker.Submit(ctx, task)
+			if err != nil {
+				t.Logf("Failed to submit task: err = %s", err)
+				continue
+			}
+			handleMap[handle.id] = handle
+		}
+
+		time.Sleep(1 * time.Second)
+
+		thpWorker.Shutdown()
+		thpWorker.Wait()
+
+		for _, handle := range handleMap {
+			assert.NotEqual(t, nil, handle.Panic(), "Panic not observed for: id = %d", handle.id)
+		}
+
+		logOutput = io.Discard
+	})
 }
