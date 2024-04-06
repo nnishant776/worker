@@ -1,9 +1,10 @@
 package worker
 
 type workerConfig struct {
-	queueSize int
-	poolSize  int
-	autoStart bool
+	queueSize   int
+	poolSize    int
+	autoStart   bool
+	autoRespawn bool
 }
 
 type workerOptFunc func(*workerConfig)
@@ -31,5 +32,11 @@ func WithPoolSize(size int) Option {
 func WithNoAutoStart() Option {
 	return workerOptFunc(func(cfg *workerConfig) {
 		cfg.autoStart = false
+	})
+}
+
+func WithNoWorkerAutoRespawn() Option {
+	return workerOptFunc(func(cfg *workerConfig) {
+		cfg.autoRespawn = false
 	})
 }
