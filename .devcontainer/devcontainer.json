@@ -1,0 +1,32 @@
+{
+    "name": "worker",
+    "build": {
+        "dockerfile": "Dockerfile",
+        "context": "."
+    },
+    "capAdd": [
+        "SYS_PTRACE"
+    ],
+    "securityOpt": [
+        "seccomp=unconfined",
+        "label=disable"
+    ],
+    "mounts": [
+        {
+            "source": "${localWorkspaceFolder}",
+            "target": "/workspace",
+            "type": "bind"
+        }
+    ],
+    "runArgs": [
+        "--name",
+        "vscode-worker",
+        "--network=host",
+        "--userns=host"
+    ],
+    "workspaceFolder": "/workspace",
+    "overrideCommand": true,
+    "remoteUser": "root",
+    "containerUser": "root",
+    "privileged": false
+}
