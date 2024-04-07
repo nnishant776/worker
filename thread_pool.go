@@ -7,6 +7,7 @@ import (
 	"runtime"
 	"sync"
 	"sync/atomic"
+	"time"
 )
 
 var logOutput io.Writer = io.Discard
@@ -160,6 +161,10 @@ func (self *ThreadPoolWorker) runProducer(ctx context.Context, wg *sync.WaitGrou
 		case <-ctx.Done():
 			return
 		case task := <-self.taskQueue:
+			if self.cfg.schedDelay > 0 {
+				time.Sleep(self.cfg.schedDelay)
+			}
+
 			self.runQueue <- task
 		}
 	}
