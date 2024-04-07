@@ -1,10 +1,13 @@
 package worker
 
+import "time"
+
 type workerConfig struct {
 	queueSize   int
 	poolSize    int
 	autoStart   bool
 	autoRespawn bool
+	schedDelay  time.Duration
 }
 
 type workerOptFunc func(*workerConfig)
