@@ -20,7 +20,7 @@ func withSchedulingDelay(dur time.Duration) Option {
 func Test_ThreadPoolWorker(t *testing.T) {
 	t.Run("Creation", func(t *testing.T) {
 		t.Run("Without options", func(t *testing.T) {
-			var maxQueueSize = runtime.GOMAXPROCS(0)
+			var maxQueueSize = uint32(runtime.GOMAXPROCS(0))
 			var ctx = context.Background()
 			var thpWorker = NewThreadPoolWorker(ctx)
 			assert.Equal(t, maxQueueSize, thpWorker.cfg.queueSize)
@@ -45,18 +45,18 @@ func Test_ThreadPoolWorker(t *testing.T) {
 
 			t.Run("WithQueueSize", func(t *testing.T) {
 				var ctx = context.Background()
-				var maxQueueSize = runtime.GOMAXPROCS(0)
+				var maxQueueSize = DefaultQueueSize()
 				var thpWorker = NewThreadPoolWorker(ctx, WithQueueSize(4))
-				assert.Equal(t, 4, thpWorker.cfg.queueSize)
+				assert.Equal(t, uint32(4), thpWorker.cfg.queueSize)
 				assert.Equal(t, maxQueueSize, thpWorker.cfg.poolSize)
 			})
 
 			t.Run("WithPoolSize", func(t *testing.T) {
 				var ctx = context.Background()
-				var maxQueueSize = runtime.GOMAXPROCS(0)
+				var maxQueueSize = DefaultPoolSize()
 				var thpWorker = NewThreadPoolWorker(ctx, WithPoolSize(4))
 				assert.Equal(t, maxQueueSize, thpWorker.cfg.queueSize)
-				assert.Equal(t, 4, thpWorker.cfg.poolSize)
+				assert.Equal(t, uint32(4), thpWorker.cfg.poolSize)
 			})
 		})
 	})
@@ -92,7 +92,7 @@ func Test_ThreadPoolWorker(t *testing.T) {
 
 	t.Run("Task cancel", func(t *testing.T) {
 		var ctx = context.Background()
-		var thpWorker = NewThreadPoolWorker(ctx, withSchedulingDelay(10*time.Millisecond))
+		var thpWorker = NewThreadPoolWorker(ctx, withSchedulingDelay(100*time.Millisecond))
 		var handleMap = map[uint64]TaskHandle{}
 
 		for i := 0; i < 20; i++ {

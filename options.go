@@ -3,8 +3,8 @@ package worker
 import "time"
 
 type workerConfig struct {
-	queueSize   int
-	poolSize    int
+	queueSize   uint32
+	poolSize    uint32
 	autoStart   bool
 	autoRespawn bool
 	schedDelay  time.Duration
@@ -20,13 +20,13 @@ type Option interface {
 	apply(*workerConfig)
 }
 
-func WithQueueSize(size int) Option {
+func WithQueueSize(size uint32) Option {
 	return workerOptFunc(func(cfg *workerConfig) {
 		cfg.queueSize = size
 	})
 }
 
-func WithPoolSize(size int) Option {
+func WithPoolSize(size uint32) Option {
 	return workerOptFunc(func(cfg *workerConfig) {
 		cfg.poolSize = size
 	})

@@ -11,6 +11,8 @@ import (
 )
 
 var logOutput io.Writer = io.Discard
+var defaultQueueSize = uint32(runtime.GOMAXPROCS(0))
+var defaultPoolSize = defaultQueueSize
 
 type ThreadPoolWorker struct {
 	orgCtx    context.Context
@@ -25,12 +27,20 @@ type ThreadPoolWorker struct {
 	mu        sync.RWMutex
 }
 
+func DefaultPoolSize() uint32 {
+	return defaultPoolSize
+}
+
+func DefaultQueueSize() uint32 {
+	return defaultQueueSize
+}
+
 func NewThreadPoolWorker(ctx context.Context, opts ...Option) *ThreadPoolWorker {
 	var workerCfg = workerConfig{
 		autoStart:   true,
 		autoRespawn: true,
-		queueSize:   runtime.GOMAXPROCS(0),
-		poolSize:    runtime.GOMAXPROCS(0),
+		queueSize:   defaultQueueSize,
+		poolSize:    defaultPoolSize,
 	}
 
 	for _, opt := range opts {
@@ -105,7 +115,7 @@ func (self *ThreadPoolWorker) wait() {
 	self.wg.Wait()
 }
 
-func (self *ThreadPoolWorker) runWorker(ctx context.Context, id int, wg *sync.WaitGroup) {
+func (self *ThreadPoolWorker) runWorker(ctx context.Context, id uint32, wg *sync.WaitGroup) {
 	fmt.Fprintf(logOutput, "Started worker: %d\n", id)
 	defer func() {
 		if wg != nil {
@@ -196,14 +206,14 @@ func (self *ThreadPoolWorker) stopWorkers() {
 	}
 }
 
-func (self *ThreadPoolWorker) startWorkers(count int) {
+func (self *ThreadPoolWorker) startWorkers(count uint32) {
 	self.stopWorkers()
 
 	workerCtx, workerCancel := context.WithCancel(self.orgCtx)
 	self.ctx = workerCtx
 	self.shutdown = workerCancel
 
-	for i := 0; i < count; i++ {
+	for i := uint32(0); i < count; i++ {
 		self.wg.Add(1)
 		go self.runWorker(workerCtx, i, &self.wg)
 	}
