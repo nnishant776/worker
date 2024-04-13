@@ -107,23 +107,25 @@ func (self *ThreadPoolWorker) wait() {
 
 func (self *ThreadPoolWorker) runWorker(ctx context.Context, id int, wg *sync.WaitGroup) {
 	fmt.Fprintf(logOutput, "Started worker: %d\n", id)
-	if wg != nil {
-		defer func() {
+	defer func() {
+		if wg != nil {
 			wg.Done()
 			fmt.Fprintf(logOutput, "Decremented the wg counter\n")
-			fmt.Fprintf(logOutput, "Stopped worker thread: id = %d\n", id)
-		}()
-	}
+		}
+		fmt.Fprintf(logOutput, "Stopped worker thread: id = %d\n", id)
+	}()
 
 	var task Task
 
 	defer func() {
 		if err := recover(); err != nil {
-			fmt.Fprintf(logOutput, "Thread paniced: %+v\n", err)
+			fmt.Fprintf(logOutput, "Thread paniced: id = %d, reason = %+v\n", id, err)
 			task.handle.panic <- err
 			if self.cfg.autoRespawn {
-				fmt.Fprintf(logOutput, "Worker thread paniced. Respawning: id = %d\n", id)
-				wg.Add(1)
+				fmt.Fprintf(logOutput, "Respawning worker: id = %d\n", id)
+				if wg != nil {
+					wg.Add(1)
+				}
 				go self.runWorker(ctx, id, wg)
 			}
 		}
@@ -147,12 +149,12 @@ func (self *ThreadPoolWorker) runWorker(ctx context.Context, id int, wg *sync.Wa
 
 func (self *ThreadPoolWorker) runProducer(ctx context.Context, wg *sync.WaitGroup) {
 	fmt.Fprintf(logOutput, "Started producer thread\n")
-	if wg != nil {
-		defer func() {
+	defer func() {
+		if wg != nil {
 			wg.Done()
-			fmt.Fprintf(logOutput, "Stopped producer thread\n")
-		}()
-	}
+		}
+		fmt.Fprintf(logOutput, "Stopped producer thread\n")
+	}()
 
 	for {
 		select {
