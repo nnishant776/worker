@@ -92,8 +92,6 @@ func (self *ThreadPoolWorker) Stop() {
 }
 
 func (self *ThreadPoolWorker) Wait() {
-	self.mu.Lock()
-	defer self.mu.Unlock()
 	self.wait()
 }
 
