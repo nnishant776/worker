@@ -3,18 +3,34 @@ package worker
 import (
 	"context"
 	"errors"
-	"fmt"
 	"runtime"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 )
 
-func withSchedulingDelay(dur time.Duration) Option {
-	return workerOptFunc(func(cfg *workerConfig) {
+func withSchedulingDelay(dur time.Duration) WorkerOption {
+	return func(cfg workerConfig) workerConfig {
 		cfg.schedDelay = dur
-	})
+		return cfg
+	}
+}
+
+func withAllNotifier(statuses ...TaskStatus) TaskOption {
+	return func(cfg taskConfig) taskConfig {
+		cfg.notifier = make(chan struct{}, _TASK_STATUS_MAX_)
+		for i := range _TASK_STATUS_MAX_ {
+			cfg.taskBitmap[i] = true
+		}
+		return cfg
+	}
+}
+
+type taskInfo struct {
+	task     *TaskHandle
+	listener <-chan struct{}
 }
 
 func Test_ThreadPoolWorker(t *testing.T) {
@@ -64,26 +80,31 @@ func Test_ThreadPoolWorker(t *testing.T) {
 	t.Run("Task completion", func(t *testing.T) {
 		var ctx = context.Background()
 		var thpWorker = NewThreadPoolWorker(ctx)
-		var handleMap = map[uint64]TaskHandle{}
+		var handleMap = map[uint64]taskInfo{}
 
 		for i := 0; i < 20; i++ {
-			var task = Task{
-				Run: func() {
-					// t.Logf("Finished task: id = %d", i+1)
-				},
-			}
+			var task = NewTask(func() {}, withAllNotifier(), WithHighPriority(), WithUUID(""))
 			handle, err := thpWorker.Submit(ctx, task)
 			if err != nil {
 				// t.Logf("Failed to submit task: err = %s", err)
 				continue
 			}
-			handleMap[handle.id] = handle
+			ch, _ := handle.Channel()
+			handleMap[handle.ID()] = taskInfo{
+				task:     handle,
+				listener: ch,
+			}
 		}
 
 		for _, handle := range handleMap {
-			var ch = handle.Done()
-			<-ch
-			assert.Equal(t, true, handle.IsDone())
+			for {
+				<-handle.listener
+				status, _ := handle.task.Status()
+				if status > TaskStatus_Processing {
+					assert.Equal(t, TaskStatus_Done, status)
+					break
+				}
+			}
 		}
 
 		thpWorker.Shutdown()
@@ -92,26 +113,33 @@ func Test_ThreadPoolWorker(t *testing.T) {
 
 	t.Run("Task cancel", func(t *testing.T) {
 		var ctx = context.Background()
-		var thpWorker = NewThreadPoolWorker(ctx, withSchedulingDelay(100*time.Millisecond))
-		var handleMap = map[uint64]TaskHandle{}
+		var thpWorker = NewThreadPoolWorker(ctx, withSchedulingDelay(10*time.Millisecond))
+		var handleMap = map[uint64]taskInfo{}
 
 		for i := 0; i < 20; i++ {
-			var task = Task{
-				Run: func() {
-					// t.Logf("Finished task: id = %d", i+1)
-				},
-			}
+			var task = NewTask(func() {}, withAllNotifier())
 			handle, err := thpWorker.Submit(ctx, task)
 			if err != nil {
 				// t.Logf("Failed to submit task: err = %s", err)
 				continue
 			}
-			handleMap[handle.id] = handle
+			ch, _ := handle.Channel()
+			handleMap[handle.ID()] = taskInfo{
+				task:     handle,
+				listener: ch,
+			}
 			handle.Cancel()
 		}
 
 		for _, handle := range handleMap {
-			assert.Equal(t, true, handle.IsCancelled())
+			for {
+				<-handle.listener
+				status, _ := handle.task.Status()
+				if status > TaskStatus_Processing {
+					assert.Equal(t, TaskStatus_Done, status)
+					break
+				}
+			}
 		}
 
 		thpWorker.Shutdown()
@@ -123,11 +151,7 @@ func Test_ThreadPoolWorker(t *testing.T) {
 		var thpWorker = NewThreadPoolWorker(ctx, WithNoAutoStart())
 
 		for i := 0; i < 20; i++ {
-			var task = Task{
-				Run: func() {
-					// t.Logf("Finished task: id = %d", i+1)
-				},
-			}
+			var task = NewTask(func() {}, withAllNotifier())
 			chCtx, _ := context.WithTimeout(ctx, 10*time.Millisecond)
 			_, err := thpWorker.Submit(chCtx, task)
 			if err != nil {
@@ -144,68 +168,87 @@ func Test_ThreadPoolWorker(t *testing.T) {
 	t.Run("Worker panic", func(t *testing.T) {
 		var ctx = context.Background()
 		var thpWorker = NewThreadPoolWorker(ctx)
-		var handleMap = map[uint64]TaskHandle{}
+		var handleMap = sync.Map{}
 
-		for i := 0; i < 20; i++ {
-			var task = Task{
-				Run: func() {
-					panic(fmt.Sprintf("Task paniced: id = %d", i+1))
-				},
+		go func() {
+			for i := 0; i < 20; i++ {
+				var task = NewTask(func() { panic("test panic") }, withAllNotifier())
+				handle, err := thpWorker.Submit(ctx, task)
+				if err != nil {
+					t.Logf("Failed to submit task: err = %s", err)
+					continue
+				}
+				ch, _ := handle.Channel()
+				handleMap.LoadOrStore(handle.ID(), taskInfo{
+					task:     handle,
+					listener: ch,
+				})
 			}
-			handle, err := thpWorker.Submit(ctx, task)
-			if err != nil {
-				t.Logf("Failed to submit task: err = %s", err)
-				continue
-			}
-			handleMap[handle.id] = handle
-		}
+		}()
 
-		time.Sleep(1 * time.Second)
+		handleMap.Range(func(key any, value any) bool {
+			var handle = value.(taskInfo)
+			for {
+				<-handle.listener
+				status, err := handle.task.Status()
+				if status > TaskStatus_Processing {
+					assert.Equal(t, TaskStatus_Failed, status, "Task status should be failed")
+					assert.NotEqual(t, nil, err, "Panic not observed for: id = %d", handle.task.ID())
+					break
+				}
+			}
+			return true
+		})
 
 		thpWorker.Shutdown()
 		thpWorker.Wait()
-
-		for _, handle := range handleMap {
-			assert.NotEqual(t, nil, handle.Panic(), "Panic not observed for: id = %d", handle.id)
-		}
 	})
 
 	t.Run("Producer", func(t *testing.T) {
 		t.Run("Manual start", func(t *testing.T) {
 			var ctx = context.Background()
 			var thpWorker = NewThreadPoolWorker(ctx, WithNoAutoStart())
-			var handleMap = map[uint64]TaskHandle{}
+			var handleMap = map[uint64]taskInfo{}
 
-			assert.Equal(t, true, thpWorker.stop == nil)
+			assert.Equal(t, true, thpWorker.producerStop == nil)
 
 			var doneCh = make(chan struct{})
 
 			go func() {
 				for i := 0; i < 20; i++ {
-					var task = Task{
-						Run: func() {
-							// t.Logf("Finished task: id = %d", i+1)
-						},
-					}
+					var task = NewTask(func() {}, withAllNotifier())
 					handle, err := thpWorker.Submit(ctx, task)
 					if err != nil {
 						// t.Logf("Failed to submit task: err = %s", err)
 						continue
 					}
-					handleMap[handle.id] = handle
+					ch, _ := handle.Channel()
+					handleMap[handle.ID()] = taskInfo{
+						task:     handle,
+						listener: ch,
+					}
 				}
 
 				doneCh <- struct{}{}
 			}()
 
-			thpWorker.Start()
+			go func() {
+				thpWorker.start()
+			}()
 
 			<-doneCh
 
 			for _, handle := range handleMap {
-				var ch = handle.Done()
-				<-ch
-				assert.Equal(t, true, handle.IsDone())
+				for {
+					<-handle.listener
+					status, _ := handle.task.Status()
+					if status > TaskStatus_Processing {
+						status, err := handle.task.Status()
+						assert.Equal(t, TaskStatus_Done, status)
+						assert.Equal(t, nil, err)
+						break
+					}
+				}
 			}
 
 			thpWorker.Shutdown()
@@ -216,42 +259,54 @@ func Test_ThreadPoolWorker(t *testing.T) {
 		t.Run("Manual stop", func(t *testing.T) {
 			var ctx = context.Background()
 			var thpWorker = NewThreadPoolWorker(ctx, withSchedulingDelay(10*time.Millisecond))
-			var handleMap = map[uint64]TaskHandle{}
+			var handleMap = map[uint64]taskInfo{}
 
-			assert.Equal(t, false, thpWorker.stop == nil)
+			assert.Equal(t, false, thpWorker.producerStop == nil)
 
 			var doneCh = make(chan struct{})
 
 			go func() {
 				for i := 0; i < 20; i++ {
-					var task = Task{
-						Run: func() {
-							// t.Logf("Finished task: id = %d", i+1)
-						},
-					}
+					var task = NewTask(func() {}, withAllNotifier())
 					handle, err := thpWorker.Submit(ctx, task)
 					if err != nil {
 						// t.Logf("Failed to submit task: err = %s", err)
 						continue
 					}
-					handleMap[handle.id] = handle
+					ch, _ := handle.Channel()
+					handleMap[handle.ID()] = taskInfo{
+						task:     handle,
+						listener: ch,
+					}
 				}
 
 				doneCh <- struct{}{}
 			}()
 
-			thpWorker.Stop()
+			var stopCh = make(chan struct{})
+			go func() {
+				thpWorker.stop()
+				stopCh <- struct{}{}
+			}()
 
-			assert.Equal(t, true, thpWorker.stop == nil)
+			<-stopCh
+			assert.Equal(t, true, thpWorker.producerStop == nil)
 
-			thpWorker.Start()
+			thpWorker.start()
 
 			<-doneCh
 
 			for _, handle := range handleMap {
-				var ch = handle.Done()
-				<-ch
-				assert.Equal(t, true, handle.IsDone())
+				for {
+					<-handle.listener
+					status, _ := handle.task.Status()
+					if status > TaskStatus_Processing {
+						status, err := handle.task.Status()
+						assert.Equal(t, TaskStatus_Done, status)
+						assert.Equal(t, nil, err)
+						break
+					}
+				}
 			}
 
 			thpWorker.Shutdown()

@@ -1,61 +1,100 @@
 package worker
 
+import (
+	"errors"
+	"sync"
+)
+
+type TaskStatus int32
+
+const (
+	TaskStatus_Unknown TaskStatus = iota
+	TaskStatus_Submitted
+	TaskStatus_Queued
+	TaskStatus_Cancelled
+	TaskStatus_Processing
+	TaskStatus_Done
+	TaskStatus_Failed
+	_TASK_STATUS_MAX_
+)
+
+var ErrNoSubscriber = errors.New("no listener for this task")
+
 type Task struct {
-	Run            func()
-	handle         TaskHandle
-	isHighPriority bool
+	Run    func()
+	handle *TaskHandle
+	cfg    taskConfig
 }
 
-func (self *Task) SetHighPriority() {
-	self.isHighPriority = true
+func NewTask(job func(), opts ...TaskOption) Task {
+	var taskCfg taskConfig
+
+	for _, opt := range opts {
+		taskCfg = opt(taskCfg)
+	}
+
+	return Task{
+		Run: job,
+		cfg: taskCfg,
+	}
 }
 
 type TaskHandle struct {
-	done   chan struct{}
-	cancel chan struct{}
-	panic  chan any
-	id     uint64
+	panicData any
+	notifier  chan struct{}
+	uuid      string
+	id        uint64
+	mu        sync.RWMutex
+	status    TaskStatus
 }
 
-func (self TaskHandle) ID() uint64 {
+func (self *TaskHandle) ID() uint64 {
 	return self.id
 }
 
-func (self TaskHandle) IsDone() bool {
-	select {
-	case <-self.done:
-		return true
-	default:
-		return false
+func (self *TaskHandle) UUID() string {
+	return self.uuid
+}
+
+func (self *TaskHandle) Cancel() {
+	self.mu.Lock()
+	defer self.mu.Unlock()
+	if self.status < TaskStatus_Cancelled {
+		self.status = TaskStatus_Cancelled
+		if self.notifier != nil {
+			select {
+			case self.notifier <- struct{}{}:
+			default:
+			}
+		}
 	}
 }
 
-func (self TaskHandle) Done() <-chan struct{} {
-	return self.done
+func (self *TaskHandle) Status() (TaskStatus, any) {
+	self.mu.RLock()
+	defer self.mu.RUnlock()
+	return self.status, self.panicData
 }
 
-func (self TaskHandle) IsCancelled() bool {
-	select {
-	case <-self.cancel:
-		return true
-	default:
-		return false
+func (self *TaskHandle) Channel() (<-chan struct{}, error) {
+	if self.notifier == nil {
+		return nil, ErrNoSubscriber
 	}
+
+	return self.notifier, nil
 }
 
-func (self TaskHandle) Cancel() {
-	select {
-	case <-self.cancel:
-	default:
-		close(self.cancel)
+func (self *TaskHandle) updateStatus(status TaskStatus, panicData any, bitMap [_TASK_STATUS_MAX_]bool) {
+	self.mu.Lock()
+	defer self.mu.Unlock()
+	self.status = status
+	if panicData != nil {
+		self.panicData = panicData
 	}
-}
-
-func (self TaskHandle) Panic() any {
-	select {
-	case err := <-self.panic:
-		return err
-	default:
-		return nil
+	if bitMap[status] && self.notifier != nil {
+		select {
+		case self.notifier <- struct{}{}:
+		default:
+		}
 	}
 }
