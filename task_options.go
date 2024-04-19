@@ -3,8 +3,9 @@ package worker
 type taskConfig struct {
 	notifier     chan struct{}
 	uuid         string
-	highPriority bool
+	taskArgs     []any
 	taskBitmap   [_TASK_STATUS_MAX_]bool
+	highPriority bool
 }
 
 type TaskOption func(o taskConfig) taskConfig
@@ -31,6 +32,13 @@ func WithNotifier(statuses ...TaskStatus) TaskOption {
 func WithHighPriority() TaskOption {
 	return func(cfg taskConfig) taskConfig {
 		cfg.highPriority = true
+		return cfg
+	}
+}
+
+func WithArgs(arg ...any) TaskOption {
+	return func(cfg taskConfig) taskConfig {
+		cfg.taskArgs = append(cfg.taskArgs, arg...)
 		return cfg
 	}
 }
