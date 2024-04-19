@@ -20,7 +20,7 @@ const (
 
 var ErrNoSubscriber = errors.New("no listener for this task")
 
-type TaskFunc = func(taskID uint64, uuid string, workerID uint32)
+type TaskFunc = func(taskID uint64, uuid string, workerID uint32, args ...any)
 
 type Task struct {
 	Run    TaskFunc
