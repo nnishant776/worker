@@ -22,7 +22,7 @@ func Benchmark_ThreadPoolWorker(b *testing.B) {
 			for i := 0; i < b.N; i++ {
 				taskList = taskList[:0]
 				for j := 0; j < 1000; j++ {
-					handle, err := thpWorker.Submit(ctx, worker.NewTask(func() {}))
+					handle, err := thpWorker.Submit(ctx, worker.NewTask(func(_ uint64, _ string, _ uint32) {}))
 
 					taskList = append(taskList, taskInfo{
 						task: handle,

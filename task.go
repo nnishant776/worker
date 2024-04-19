@@ -20,13 +20,15 @@ const (
 
 var ErrNoSubscriber = errors.New("no listener for this task")
 
+type TaskFunc = func(taskID uint64, uuid string, workerID uint32)
+
 type Task struct {
-	Run    func()
+	Run    TaskFunc
 	handle *TaskHandle
 	cfg    taskConfig
 }
 
-func NewTask(job func(), opts ...TaskOption) Task {
+func NewTask(job TaskFunc, opts ...TaskOption) Task {
 	var taskCfg taskConfig
 
 	for _, opt := range opts {

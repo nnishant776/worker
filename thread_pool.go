@@ -147,7 +147,7 @@ func (self *ThreadPoolWorker) runWorker(ctx context.Context, id uint32, wg *sync
 			}
 
 			task.handle.updateStatus(TaskStatus_Processing, nil, task.cfg.taskBitmap)
-			task.Run()
+			task.Run(task.handle.id, task.handle.uuid, id)
 			task.handle.updateStatus(TaskStatus_Done, nil, task.cfg.taskBitmap)
 		}
 	}

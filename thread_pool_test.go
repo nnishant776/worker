@@ -83,7 +83,7 @@ func Test_ThreadPoolWorker(t *testing.T) {
 		var handleMap = map[uint64]taskInfo{}
 
 		for i := 0; i < 20; i++ {
-			var task = NewTask(func() {}, withAllNotifier(), WithHighPriority(), WithUUID(""))
+			var task = NewTask(func(_ uint64, _ string, _ uint32) {}, withAllNotifier(), WithHighPriority(), WithUUID(""))
 			handle, err := thpWorker.Submit(ctx, task)
 			if err != nil {
 				// t.Logf("Failed to submit task: err = %s", err)
@@ -117,7 +117,7 @@ func Test_ThreadPoolWorker(t *testing.T) {
 		var handleMap = map[uint64]taskInfo{}
 
 		for i := 0; i < 20; i++ {
-			var task = NewTask(func() {}, withAllNotifier())
+			var task = NewTask(func(_ uint64, _ string, _ uint32) {}, withAllNotifier())
 			handle, err := thpWorker.Submit(ctx, task)
 			if err != nil {
 				// t.Logf("Failed to submit task: err = %s", err)
@@ -151,7 +151,7 @@ func Test_ThreadPoolWorker(t *testing.T) {
 		var thpWorker = NewThreadPoolWorker(ctx, WithNoAutoStart())
 
 		for i := 0; i < 20; i++ {
-			var task = NewTask(func() {}, withAllNotifier())
+			var task = NewTask(func(_ uint64, _ string, _ uint32) {}, withAllNotifier())
 			chCtx, _ := context.WithTimeout(ctx, 10*time.Millisecond)
 			_, err := thpWorker.Submit(chCtx, task)
 			if err != nil {
@@ -172,7 +172,7 @@ func Test_ThreadPoolWorker(t *testing.T) {
 
 		go func() {
 			for i := 0; i < 20; i++ {
-				var task = NewTask(func() { panic("test panic") }, withAllNotifier())
+				var task = NewTask(func(_ uint64, _ string, _ uint32) { panic("test panic") }, withAllNotifier())
 				handle, err := thpWorker.Submit(ctx, task)
 				if err != nil {
 					t.Logf("Failed to submit task: err = %s", err)
@@ -216,7 +216,7 @@ func Test_ThreadPoolWorker(t *testing.T) {
 
 			go func() {
 				for i := 0; i < 20; i++ {
-					var task = NewTask(func() {}, withAllNotifier())
+					var task = NewTask(func(_ uint64, _ string, _ uint32) {}, withAllNotifier())
 					handle, err := thpWorker.Submit(ctx, task)
 					if err != nil {
 						// t.Logf("Failed to submit task: err = %s", err)
@@ -267,7 +267,7 @@ func Test_ThreadPoolWorker(t *testing.T) {
 
 			go func() {
 				for i := 0; i < 20; i++ {
-					var task = NewTask(func() {}, withAllNotifier())
+					var task = NewTask(func(_ uint64, _ string, _ uint32) {}, withAllNotifier())
 					handle, err := thpWorker.Submit(ctx, task)
 					if err != nil {
 						// t.Logf("Failed to submit task: err = %s", err)
