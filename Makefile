@@ -125,3 +125,13 @@ endif
 else
 	# devcontainer up --docker-path $(runtime) && devcontainer open
 endif
+
+test:
+	go test -v -race .
+
+bench:
+	go test -run ^$ -benchmem -bench=. -count=10 github.com/nnishant776/worker/benchmark
+
+clean: type = testcache
+clean:
+	go clean -$(type)
