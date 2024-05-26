@@ -1,7 +1,7 @@
 {
     "name": "worker",
     "build": {
-        "dockerfile": "Dockerfile",
+        "dockerfile": "worker/Dockerfile",
         "context": "."
     },
     "capAdd": [
@@ -20,7 +20,7 @@
     ],
     "runArgs": [
         "--name",
-        "vscode-worker",
+        "vscode-worker-dev",
         "--network=host",
         "--userns=host"
     ],

@@ -1,0 +1,36 @@
+# Pod spec (to be used if you are using podman)
+# podman kube play pod.yml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "worker"
+  namespace: worker-dev
+  labels:
+    app: "worker"
+spec:
+  containers:
+  - name: worker-dev
+    image: "localhost/worker:dev"
+    securityContext:
+      privileged: true
+      capbilities:
+        add: [ "SYS_PTRACE" ] # Add more capabilities based on the requirements
+      seccompProfile:
+        type: Unconfined
+      allowPrivilegeEscalation: true
+    command: [ "/lib/systemd/systemd" ] # Optional. Remove if you don't want systemd
+    tty: true
+    stdin: true
+    volumeMounts:
+    - name: localtime
+      mountPath: /etc/localtime
+    - name: source_code
+      mountPath: /workspace
+  volumes:
+    - name: localtime
+      hostPath:
+        path: /usr/share/zoneinfo/UTC # Change this to your desired timezone
+    - name: source_code
+      hostPath:
+        path: ../
+---

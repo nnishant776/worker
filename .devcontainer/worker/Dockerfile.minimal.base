@@ -1,0 +1,17 @@
+FROM debian:latest
+
+RUN apt -y update
+
+RUN apt -y install --no-install-recommends \
+    git \
+    tree \
+    curl \
+    nano \
+    python3-pip \
+    unzip \
+    tar \
+    gzip \
+    make \
+    file
+
+RUN apt -y clean all

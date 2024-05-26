@@ -1,0 +1,29 @@
+version: '3'
+services:
+  development:
+    image: worker:dev
+    build:
+      context: .
+      dockerfile: worker/Dockerfile
+    cap_add:
+      - SYS_PTRACE # Add more capabilities based on the requirements
+    command: [ "/lib/systemd/systemd" ] # Optional. Remove if you don't want systemd
+    container_name: worker-dev
+    userns_mode: "host"
+    privileged: true
+    network_mode: "host"
+    tty: true
+    stdin_open: true
+    environment:
+      SHELL: /usr/bin/bash
+    security_opt:
+      - label=disable
+      - seccomp=unconfined
+    working_dir: /workspace
+    tmpfs:
+      - /run # optional. needed only if using systemd
+      - /tmp # optional. needed only if using systemd
+      - /var/log/journal # optional. needed only if using systemd
+    volumes:
+      - ../:/workspace
+      - /sys/fs/cgroup:/sys/fs/cgroup:ro # optional. needed only if using systemd
