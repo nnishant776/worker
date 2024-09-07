@@ -36,9 +36,9 @@ type taskInfo struct {
 func Test_ThreadPoolWorker(t *testing.T) {
 	t.Run("Creation", func(t *testing.T) {
 		t.Run("Without options", func(t *testing.T) {
-			var maxQueueSize = uint32(runtime.GOMAXPROCS(0))
-			var ctx = context.Background()
-			var thpWorker = NewThreadPoolWorker(ctx)
+			maxQueueSize := uint32(runtime.GOMAXPROCS(0))
+			ctx := context.Background()
+			thpWorker := NewThreadPoolWorker(ctx)
 			assert.Equal(t, maxQueueSize, thpWorker.cfg.queueSize)
 			assert.Equal(t, maxQueueSize, thpWorker.cfg.poolSize)
 			assert.Equal(t, true, thpWorker.cfg.autoStart)
@@ -48,29 +48,29 @@ func Test_ThreadPoolWorker(t *testing.T) {
 
 		t.Run("With options", func(t *testing.T) {
 			t.Run("WithNoAutoStart", func(t *testing.T) {
-				var ctx = context.Background()
-				var thpWorker = NewThreadPoolWorker(ctx, WithNoAutoStart())
+				ctx := context.Background()
+				thpWorker := NewThreadPoolWorker(ctx, WithNoAutoStart())
 				assert.Equal(t, false, thpWorker.cfg.autoStart)
 			})
 
 			t.Run("WithNoWorkerAutoRespawn", func(t *testing.T) {
-				var ctx = context.Background()
-				var thpWorker = NewThreadPoolWorker(ctx, WithNoWorkerAutoRespawn())
+				ctx := context.Background()
+				thpWorker := NewThreadPoolWorker(ctx, WithNoWorkerAutoRespawn())
 				assert.Equal(t, false, thpWorker.cfg.autoRespawn)
 			})
 
 			t.Run("WithQueueSize", func(t *testing.T) {
-				var ctx = context.Background()
-				var maxQueueSize = DefaultQueueSize()
-				var thpWorker = NewThreadPoolWorker(ctx, WithQueueSize(4))
+				ctx := context.Background()
+				maxQueueSize := DefaultQueueSize()
+				thpWorker := NewThreadPoolWorker(ctx, WithQueueSize(4))
 				assert.Equal(t, uint32(4), thpWorker.cfg.queueSize)
 				assert.Equal(t, maxQueueSize, thpWorker.cfg.poolSize)
 			})
 
 			t.Run("WithPoolSize", func(t *testing.T) {
-				var ctx = context.Background()
-				var maxQueueSize = DefaultPoolSize()
-				var thpWorker = NewThreadPoolWorker(ctx, WithPoolSize(4))
+				ctx := context.Background()
+				maxQueueSize := DefaultPoolSize()
+				thpWorker := NewThreadPoolWorker(ctx, WithPoolSize(4))
 				assert.Equal(t, maxQueueSize, thpWorker.cfg.queueSize)
 				assert.Equal(t, uint32(4), thpWorker.cfg.poolSize)
 			})
@@ -78,12 +78,12 @@ func Test_ThreadPoolWorker(t *testing.T) {
 	})
 
 	t.Run("Task completion", func(t *testing.T) {
-		var ctx = context.Background()
-		var thpWorker = NewThreadPoolWorker(ctx)
-		var handleMap = map[uint64]taskInfo{}
+		ctx := context.Background()
+		thpWorker := NewThreadPoolWorker(ctx)
+		handleMap := map[uint64]taskInfo{}
 
 		for i := 0; i < 20; i++ {
-			var task = NewTask(func(_ uint64, _ string, _ uint32, arg ...any) {}, withAllNotifier(), WithHighPriority(), WithUUID(""))
+			task := NewTask(func(_ uint64, _ string, _ uint32, arg ...any) {}, withAllNotifier(), WithHighPriority(), WithUUID(""))
 			handle, err := thpWorker.Submit(ctx, task)
 			if err != nil {
 				// t.Logf("Failed to submit task: err = %s", err)
@@ -112,12 +112,12 @@ func Test_ThreadPoolWorker(t *testing.T) {
 	})
 
 	t.Run("Task cancel", func(t *testing.T) {
-		var ctx = context.Background()
-		var thpWorker = NewThreadPoolWorker(ctx, withSchedulingDelay(10*time.Millisecond))
-		var handleMap = map[uint64]taskInfo{}
+		ctx := context.Background()
+		thpWorker := NewThreadPoolWorker(ctx, withSchedulingDelay(10*time.Millisecond))
+		handleMap := map[uint64]taskInfo{}
 
 		for i := 0; i < 20; i++ {
-			var task = NewTask(func(_ uint64, _ string, _ uint32, arg ...any) {}, withAllNotifier())
+			task := NewTask(func(_ uint64, _ string, _ uint32, arg ...any) {}, withAllNotifier())
 			handle, err := thpWorker.Submit(ctx, task)
 			if err != nil {
 				// t.Logf("Failed to submit task: err = %s", err)
@@ -147,11 +147,11 @@ func Test_ThreadPoolWorker(t *testing.T) {
 	})
 
 	t.Run("Submit timeout", func(t *testing.T) {
-		var ctx = context.Background()
-		var thpWorker = NewThreadPoolWorker(ctx, WithNoAutoStart())
+		ctx := context.Background()
+		thpWorker := NewThreadPoolWorker(ctx, WithNoAutoStart())
 
 		for i := 0; i < 20; i++ {
-			var task = NewTask(func(_ uint64, _ string, _ uint32, arg ...any) {}, withAllNotifier())
+			task := NewTask(func(_ uint64, _ string, _ uint32, arg ...any) {}, withAllNotifier())
 			chCtx, _ := context.WithTimeout(ctx, 10*time.Millisecond)
 			_, err := thpWorker.Submit(chCtx, task)
 			if err != nil {
@@ -166,13 +166,13 @@ func Test_ThreadPoolWorker(t *testing.T) {
 	})
 
 	t.Run("Worker panic", func(t *testing.T) {
-		var ctx = context.Background()
-		var thpWorker = NewThreadPoolWorker(ctx)
-		var handleMap = sync.Map{}
+		ctx := context.Background()
+		thpWorker := NewThreadPoolWorker(ctx)
+		handleMap := sync.Map{}
 
 		go func() {
 			for i := 0; i < 20; i++ {
-				var task = NewTask(func(_ uint64, _ string, _ uint32, arg ...any) { panic("test panic") }, withAllNotifier())
+				task := NewTask(func(_ uint64, _ string, _ uint32, arg ...any) { panic("test panic") }, withAllNotifier())
 				handle, err := thpWorker.Submit(ctx, task)
 				if err != nil {
 					t.Logf("Failed to submit task: err = %s", err)
@@ -187,7 +187,7 @@ func Test_ThreadPoolWorker(t *testing.T) {
 		}()
 
 		handleMap.Range(func(key any, value any) bool {
-			var handle = value.(taskInfo)
+			handle := value.(taskInfo)
 			for {
 				<-handle.listener
 				status, err := handle.task.Status()
@@ -206,17 +206,17 @@ func Test_ThreadPoolWorker(t *testing.T) {
 
 	t.Run("Producer", func(t *testing.T) {
 		t.Run("Manual start", func(t *testing.T) {
-			var ctx = context.Background()
-			var thpWorker = NewThreadPoolWorker(ctx, WithNoAutoStart())
-			var handleMap = map[uint64]taskInfo{}
+			ctx := context.Background()
+			thpWorker := NewThreadPoolWorker(ctx, WithNoAutoStart())
+			handleMap := map[uint64]taskInfo{}
 
 			assert.Equal(t, true, thpWorker.producerStop == nil)
 
-			var doneCh = make(chan struct{})
+			doneCh := make(chan struct{})
 
 			go func() {
 				for i := 0; i < 20; i++ {
-					var task = NewTask(func(_ uint64, _ string, _ uint32, arg ...any) {}, withAllNotifier())
+					task := NewTask(func(_ uint64, _ string, _ uint32, arg ...any) {}, withAllNotifier())
 					handle, err := thpWorker.Submit(ctx, task)
 					if err != nil {
 						// t.Logf("Failed to submit task: err = %s", err)
@@ -257,17 +257,17 @@ func Test_ThreadPoolWorker(t *testing.T) {
 		})
 
 		t.Run("Manual stop", func(t *testing.T) {
-			var ctx = context.Background()
-			var thpWorker = NewThreadPoolWorker(ctx, withSchedulingDelay(10*time.Millisecond))
-			var handleMap = map[uint64]taskInfo{}
+			ctx := context.Background()
+			thpWorker := NewThreadPoolWorker(ctx, withSchedulingDelay(10*time.Millisecond))
+			handleMap := map[uint64]taskInfo{}
 
 			assert.Equal(t, false, thpWorker.producerStop == nil)
 
-			var doneCh = make(chan struct{})
+			doneCh := make(chan struct{})
 
 			go func() {
 				for i := 0; i < 20; i++ {
-					var task = NewTask(func(_ uint64, _ string, _ uint32, arg ...any) {}, withAllNotifier())
+					task := NewTask(func(_ uint64, _ string, _ uint32, arg ...any) {}, withAllNotifier())
 					handle, err := thpWorker.Submit(ctx, task)
 					if err != nil {
 						// t.Logf("Failed to submit task: err = %s", err)
@@ -283,7 +283,7 @@ func Test_ThreadPoolWorker(t *testing.T) {
 				doneCh <- struct{}{}
 			}()
 
-			var stopCh = make(chan struct{})
+			stopCh := make(chan struct{})
 			go func() {
 				thpWorker.stop()
 				stopCh <- struct{}{}

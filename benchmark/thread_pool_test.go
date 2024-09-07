@@ -8,21 +8,27 @@ import (
 )
 
 func Benchmark_ThreadPoolWorker(b *testing.B) {
-	b.ReportAllocs()
 	b.Run("Default configuration", func(b *testing.B) {
+		type taskInfo struct {
+			task     *worker.TaskHandle
+			listener chan struct{}
+		}
+
+		taskList := make([]taskInfo, 0, 1000)
 		b.Run("1000 jobs", func(b *testing.B) {
-			var ctx = context.Background()
-			var thpWorker = worker.NewThreadPoolWorker(ctx)
-			type taskInfo struct {
-				task     *worker.TaskHandle
-				listener chan struct{}
-			}
-			var taskList = make([]taskInfo, 0, 1000)
+			b.ReportAllocs()
+			ctx := context.Background()
+			thpWorker := worker.NewThreadPoolWorker(ctx)
 
 			for i := 0; i < b.N; i++ {
 				taskList = taskList[:0]
 				for j := 0; j < 1000; j++ {
-					handle, err := thpWorker.Submit(ctx, worker.NewTask(func(_ uint64, _ string, _ uint32, args ...any) {}))
+					handle, err := thpWorker.Submit(
+						ctx,
+						worker.NewTask(
+							func(_ uint64, _ string, _ uint32, args ...any) {},
+						),
+					)
 
 					taskList = append(taskList, taskInfo{
 						task: handle,

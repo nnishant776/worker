@@ -36,7 +36,7 @@ func DefaultQueueSize() uint32 {
 }
 
 func NewThreadPoolWorker(ctx context.Context, opts ...WorkerOption) *ThreadPoolWorker {
-	var workerCfg = workerConfig{
+	workerCfg := workerConfig{
 		autoStart:   true,
 		autoRespawn: true,
 		queueSize:   defaultQueueSize,
@@ -47,7 +47,7 @@ func NewThreadPoolWorker(ctx context.Context, opts ...WorkerOption) *ThreadPoolW
 		workerCfg = opt(workerCfg)
 	}
 
-	var thpWorker = &ThreadPoolWorker{
+	thpWorker := &ThreadPoolWorker{
 		orgCtx:    ctx,
 		taskQueue: make(chan Task, workerCfg.queueSize),
 		runQueue:  make(chan Task, workerCfg.poolSize),
@@ -64,14 +64,14 @@ func NewThreadPoolWorker(ctx context.Context, opts ...WorkerOption) *ThreadPoolW
 }
 
 func (self *ThreadPoolWorker) Submit(ctx context.Context, task Task) (*TaskHandle, error) {
-	var th = &TaskHandle{
+	th := &TaskHandle{
 		id:       self.nextID.Add(1),
 		status:   TaskStatus_Submitted,
 		uuid:     task.cfg.uuid,
 		notifier: task.cfg.notifier,
 	}
 
-	var ch chan Task
+	ch := (chan Task)(nil)
 	if task.cfg.highPriority {
 		ch = self.runQueue
 		th.updateStatus(TaskStatus_Queued, nil, task.cfg.taskBitmap)
